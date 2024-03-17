@@ -147,26 +147,28 @@ else {
        <ul class="list-group">
 <?php
 
-$gid_filter  = "(&(objectclass=device)(cn=lastGID))";
-$ldap_gid_search = ldap_search($ldap_connection, "{$LDAP['base_dn']}", $gid_filter);
-$gid_result = ldap_get_entries($ldap_connection, $ldap_gid_search);
+if ($SHOW_POSIX_ATTRIBUTES == TRUE) {
+    $gid_filter  = "(&(objectclass=device)(cn=lastGID))";
+    $ldap_gid_search = ldap_search($ldap_connection, "{$LDAP['base_dn']}", $gid_filter);
+    $gid_result = ldap_get_entries($ldap_connection, $ldap_gid_search);
 
-if ($gid_result['count'] != 1) {
+    if ($gid_result['count'] != 1) {
 
- print "$li_warn The <strong>lastGID</strong> entry doesn't exist. ";
- print "<a href='#' data-toggle='popover' title='cn=lastGID,{$LDAP['base_dn']}' data-content='";
- print "This is used to store the last group ID used when creating a POSIX group.  Without this the highest current group ID is found and incremented, but this might re-use the GID from a deleted group.";
- print "'>What's this?</a>";
- print "<label class='pull-right'><input type='checkbox' name='setup_last_gid' class='pull-right' checked>Create?&nbsp;</label>";
- print "</li>\n";
- $show_finish_button = FALSE;
+        print "$li_warn The <strong>lastGID</strong> entry doesn't exist. ";
+        print "<a href='#' data-toggle='popover' title='cn=lastGID,{$LDAP['base_dn']}' data-content='";
+                              print "This is used to store the last group ID used when creating a POSIX group.  Without this the highest current group ID is found and incremented, but this might re-use the GID from a deleted group.";
+                              print "'>What's this?</a>";
+                              print "<label class='pull-right'><input type='checkbox' name='setup_last_gid' class='pull-right' checked>Create?&nbsp;</label>";
+                              print "</li>\n";
+                              $show_finish_button = FALSE;
 
+    }
+    else {
+        print "$li_good The <strong>lastGID</strong> entry is present.</li>";
+    }
 }
-else {
- print "$li_good The <strong>lastGID</strong> entry is present.</li>";
-}
 
-
+if ($SHOW_POSIX_ATTRIBUTES == TRUE) {
 $uid_filter  = "(&(objectclass=device)(cn=lastUID))";
 $ldap_uid_search = ldap_search($ldap_connection, "{$LDAP['base_dn']}", $uid_filter);
 $uid_result = ldap_get_entries($ldap_connection, $ldap_uid_search);
@@ -185,10 +187,17 @@ if ($uid_result['count'] != 1) {
 else {
  print "$li_good The <strong>lastUID</strong> entry is present.</li>";
 }
+}
 
 
-$defgroup_filter  = "(&(objectclass=posixGroup)({$LDAP['group_attribute']}={$DEFAULT_USER_GROUP}))";
+$defgroup_filter  = "(&(objectclass={$LDAP['group_object_class']})({$LDAP['group_attribute']}={$DEFAULT_USER_GROUP}))";
+echo "<pre>$defgroup_filter</pre>";
+echo "<pre>". var_export($LDAP, true) . "</pre>";
 $ldap_defgroup_search = ldap_search($ldap_connection, "{$LDAP['base_dn']}", $defgroup_filter);
+if ($ldap_defgroup_search == FALSE) {
+    print "$li_fail Failed to query for the default group (<strong>$DEFAULT_USER_GROUP</strong>).";
+    exit(1);
+}
 $defgroup_result = ldap_get_entries($ldap_connection, $ldap_defgroup_search);
 
 if ($defgroup_result['count'] != 1) {
@@ -207,7 +216,7 @@ else {
 }
 
 
-$adminsgroup_filter  = "(&(objectclass=posixGroup)({$LDAP['group_attribute']}={$LDAP['admins_group']}))";
+$adminsgroup_filter  = "(&(objectclass={$LDAP['group_object_class']})({$LDAP['group_attribute']}={$LDAP['admins_group']}))";
 $ldap_adminsgroup_search = ldap_search($ldap_connection, "{$LDAP['base_dn']}", $adminsgroup_filter);
 $adminsgroup_result = ldap_get_entries($ldap_connection, $ldap_adminsgroup_search);
 

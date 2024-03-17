@@ -105,81 +105,102 @@ foreach ($attribute_map as $attribute => $attr_r) {
 
 if (isset($_GET['account_request'])) {
 
-  $givenname[0]=filter_var($_GET['first_name'], FILTER_SANITIZE_FULL_SPECIAL_CHARS);
-  $new_account_r['givenname'] = $givenname[0];
-
-  $sn[0]=filter_var($_GET['last_name'], FILTER_SANITIZE_FULL_SPECIAL_CHARS);
-  $new_account_r['sn'] = $sn[0];
-
-  $mail[0]=filter_var($_GET['email'], FILTER_SANITIZE_EMAIL);
-  if ($mail[0] == "") {
-    if (isset($EMAIL_DOMAIN)) {
-      $mail[0] = $uid . "@" . $EMAIL_DOMAIN;
-      $disabled_email_tickbox = FALSE;
+    if (array_key_exists('givenname', $attribute_map)) {
+        $givenname[0]=filter_var($_GET['first_name'], FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+        $new_account_r['givenname'] = $givenname[0];
     }
-  }
-  else {
-    $disabled_email_tickbox = FALSE;
-  }
-  $new_account_r['mail'] = $mail;
-  unset($new_account_r['mail']['count']);
+
+    if (array_key_exists('sn', $attribute_map)) {
+        $sn[0]=filter_var($_GET['last_name'], FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+        $new_account_r['sn'] = $sn[0];
+    }
+
+    if (array_key_exists('mail', $attribute_map)) {
+        $mail[0]=filter_var($_GET['email'], FILTER_SANITIZE_EMAIL);
+        if ($mail[0] == "") {
+            if (isset($EMAIL_DOMAIN)) {
+                $mail[0] = $uid . "@" . $EMAIL_DOMAIN;
+                $disabled_email_tickbox = FALSE;
+            }
+        }
+        else {
+            $disabled_email_tickbox = FALSE;
+        }
+        $new_account_r['mail'] = $mail;
+        unset($new_account_r['mail']['count']);
+    }
 
 }
 
 
 if (isset($_GET['account_request']) or isset($_POST['create_account'])) {
 
-  if (!isset($uid[0])) {
-    $uid[0] = generate_username($givenname[0],$sn[0]);
-    $new_account_r['uid'] = $uid;
-    unset($new_account_r['uid']['count']);
-  }
-
-  if (!isset($cn[0])) {
-    if ($ENFORCE_SAFE_SYSTEM_NAMES == TRUE) {
-      $cn[0] = $givenname[0] . $sn[0];
+    if (array_key_exists('uid', $attribute_map)) {
+        if (!isset($uid[0])) {
+            $uid[0] = generate_username($givenname[0],$sn[0]);
+            $new_account_r['uid'] = $uid;
+            unset($new_account_r['uid']['count']);
+        }
     }
-    else {
-      $cn[0] = $givenname[0] . " " . $sn[0];
+    if (array_key_exists('cn', $attribute_map)) {
+        if (!isset($cn[0])) {
+            if ($ENFORCE_SAFE_SYSTEM_NAMES == TRUE) {
+                $cn[0] = $givenname[0] . $sn[0];
+            }
+            else {
+                $cn[0] = $givenname[0] . " " . $sn[0];
+            }
+            $new_account_r['cn'] = $cn;
+            unset($new_account_r['cn']['count']);
+        }
     }
-    $new_account_r['cn'] = $cn;
-    unset($new_account_r['cn']['count']);
-  }
 
 }
 
+
+$errors="";
 
 if (isset($_POST['create_account'])) {
 
  $password  = $_POST['password'];
  $new_account_r['password'][0] = $password;
  $account_identifier = $new_account_r[$account_attribute][0];
- $this_cn=$cn[0];
- $this_mail=$mail[0];
- $this_givenname=$givenname[0];
- $this_sn=$sn[0];
+ if (array_key_exists('cn', $attribute_map)) {
+     $this_cn=$cn[0];
+     if (!isset($this_cn) or $this_cn == "") { $invalid_cn = TRUE; }
+     if ($invalid_cn) { $errors.="<li>The Common Name is required</li>\n"; }
+ }
+ if (array_key_exists('mail', $attribute_map)) {
+     $this_mail=$mail[0];
+     if (isset($this_mail) and !is_valid_email($this_mail)) { $invalid_email = TRUE; }
+     if (isset($_POST['send_email']) and isset($mail) and $EMAIL_SENDING_ENABLED == TRUE) { $send_user_email = TRUE; }
+ }
+ if (array_key_exists('givenname', $attribute_map)) {
+     $this_givenname=$givenname[0];
+     if (!isset($this_givenname) or $this_givenname == "") { $invalid_givenname = TRUE; }
+     if ($invalid_givenname) { $errors.="<li>First Name is required</li>\n"; }
+ }
+ if (array_key_exists('sn', $attribute_map)) {
+     $this_sn=$sn[0];
+     if (!isset($this_sn) or $this_sn == "") { $invalid_sn = TRUE; }
+     if ($invalid_sn) { $errors.="<li>Last Name is required</li>\n"; }
+ }
+
+
  $this_password=$password[0];
 
- if (!isset($this_cn) or $this_cn == "") { $invalid_cn = TRUE; }
  if ((!isset($account_identifier) or $account_identifier == "") and $invalid_cn != TRUE) { $invalid_account_identifier = TRUE; }
- if (!isset($this_givenname) or $this_givenname == "") { $invalid_givenname = TRUE; }
- if (!isset($this_sn) or $this_sn == "") { $invalid_sn = TRUE; }
  if ((!is_numeric($_POST['pass_score']) or $_POST['pass_score'] < 3) and $ACCEPT_WEAK_PASSWORDS != TRUE) { $weak_password = TRUE; }
- if (isset($this_mail) and !is_valid_email($this_mail)) { $invalid_email = TRUE; }
  if (preg_match("/\"|'/",$password)) { $invalid_password = TRUE; }
  if ($password != $_POST['password_match']) { $mismatched_passwords = TRUE; }
  if ($ENFORCE_SAFE_SYSTEM_NAMES == TRUE and !preg_match("/$USERNAME_REGEX/",$account_identifier)) { $invalid_account_identifier = TRUE; }
- if (isset($_POST['send_email']) and isset($mail) and $EMAIL_SENDING_ENABLED == TRUE) { $send_user_email = TRUE; }
 
- if (     isset($this_givenname)
-      and isset($this_sn)
+ if ($errors == ""
       and isset($this_password)
       and !$mismatched_passwords
       and !$weak_password
       and !$invalid_password
-      and !$invalid_account_identifier
-      and !$invalid_cn
-      and !$invalid_email) {
+      and !$invalid_account_identifier) {
 
   $ldap_connection = open_ldap_connection();
   $new_account = ldap_new_account($ldap_connection, $new_account_r);
@@ -188,23 +209,24 @@ if (isset($_POST['create_account'])) {
 
     $creation_message = "The account was created.";
 
-    if (isset($send_user_email) and $send_user_email == TRUE) {
+    if (array_key_exists('mail', $attribute_map)) {
+        if (isset($send_user_email) and $send_user_email == TRUE) {
 
-      include_once "mail_functions.inc.php";
+            include_once "mail_functions.inc.php";
 
-      $mail_body = parse_mail_text($new_account_mail_body, $password, $account_identifier, $this_givenname, $this_sn);
-      $mail_subject = parse_mail_text($new_account_mail_subject, $password, $account_identifier, $this_givenname, $this_sn);
+            $mail_body = parse_mail_text($new_account_mail_body, $password, $account_identifier, $this_givenname, $this_sn);
+            $mail_subject = parse_mail_text($new_account_mail_subject, $password, $account_identifier, $this_givenname, $this_sn);
 
-      $sent_email = send_email($this_mail,"$this_givenname $this_sn",$mail_subject,$mail_body);
-      $creation_message = "The account was created";
-      if ($sent_email) {
-        $creation_message .= " and an email sent to $this_mail.";
-      }
-      else {
-        $creation_message .= " but unfortunately the email wasn't sent.<br>More information will be available in the logs.";
-      }
+            $sent_email = send_email($this_mail,"$this_givenname $this_sn",$mail_subject,$mail_body);
+            $creation_message = "The account was created";
+            if ($sent_email) {
+                $creation_message .= " and an email sent to $this_mail.";
+            }
+            else {
+                $creation_message .= " but unfortunately the email wasn't sent.<br>More information will be available in the logs.";
+            }
+        }
     }
-
     if ($admin_setup == TRUE) {
       $member_add = ldap_add_member_to_group($ldap_connection, $LDAP['admins_group'], $account_identifier);
       if (!$member_add) { ?>
@@ -255,10 +277,6 @@ if (isset($_POST['create_account'])) {
 
 }
 
-$errors="";
-if ($invalid_cn) { $errors.="<li>The Common Name is required</li>\n"; }
-if ($invalid_givenname) { $errors.="<li>First Name is required</li>\n"; }
-if ($invalid_sn) { $errors.="<li>Last Name is required</li>\n"; }
 if ($invalid_account_identifier) {  $errors.="<li>The account identifier (" . $attribute_map[$account_attribute]['label'] . ") is invalid.</li>\n"; }
 if ($weak_password) { $errors.="<li>The password is too weak</li>\n"; }
 if ($invalid_password) { $errors.="<li>The password contained invalid characters</li>\n"; }
@@ -327,8 +345,9 @@ $tabindex=1;
 </script>
 <script>
 
- function check_email_validity(mail) {
-
+ function check_email_validity() {
+  var mail = document.getElementById('mail')?.value;
+  if (typeof mail === 'undefined') return;
   var check_regex = <?php print $JS_EMAIL_REGEX; ?>
 
   if (! check_regex.test(mail) ) {

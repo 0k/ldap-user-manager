@@ -16,25 +16,29 @@
  $min_uid = 2000;
  $min_gid = 2000;
 
+ $SHOW_POSIX_ATTRIBUTES = ((strcasecmp(getenv('SHOW_POSIX_ATTRIBUTES'),'TRUE') == 0) ? TRUE : FALSE);
+$SHOW_FULL_DN = ((strcasecmp(getenv('SHOW_FULL_DN'),'TRUE') == 0) ? TRUE : FALSE);
 
  #Default attributes and objectclasses
 
  $LDAP['account_attribute'] = (getenv('LDAP_ACCOUNT_ATTRIBUTE') ? getenv('LDAP_ACCOUNT_ATTRIBUTE') : 'uid');
- $LDAP['account_objectclasses'] = array( 'person', 'inetOrgPerson', 'posixAccount' );
- $LDAP['default_attribute_map'] = array(
+ $LDAP['account_objectclasses'] = explode(",", (getenv('LDAP_ACCOUNT_OBJECTCLASSES') ? getenv('LDAP_ACCOUNT_OBJECTCLASSES') : 'person,inetOrgPerson'));
+ $LDAP['user_attributes'] = explode(",", (getenv('LDAP_USER_ATTRIBUTES') ? getenv('LDAP_USER_ATTRIBUTES') : 'uid'));
+
+$LDAP['default_attribute_map'] = array(
+    "uid" => array(
+        "label" => "Account name",
+        "onkeyup" => "check_entity_name_validity(document.getElementById('uid').value,'uid_div'); update_email(); update_homedir(); check_email_validity(document.getElementById('mail')?.value);",
+    ),
     "givenname" => array(
         "label" => "First name",
-        "onkeyup" => "update_username(); update_email(); update_cn(); update_homedir(); check_email_validity(document.getElementById('mail').value);",
+        "onkeyup" => "update_username(); update_email(); update_cn(); update_homedir(); check_email_validity();",
         "required" => TRUE,
     ),
     "sn" => array(
         "label" => "Last name",
-        "onkeyup" => "update_username(); update_email(); update_cn(); update_homedir(); check_email_validity(document.getElementById('mail').value);",
+        "onkeyup" => "update_username(); update_email(); update_cn(); update_homedir(); check_email_validity(document.getElementById('mail')?.value);",
         "required" => TRUE,
-    ),
-    "uid" => array(
-        "label" => "System username",
-        "onkeyup" => "check_entity_name_validity(document.getElementById('uid').value,'uid_div'); update_email(); update_homedir(); check_email_validity(document.getElementById('mail').value);",
     ),
     "cn" => array(
         "label" => "Common name",
@@ -42,16 +46,14 @@
     ),
     "mail" => array(
         "label" => "Email",
-        "onkeyup" => "auto_email_update = false; check_email_validity(document.getElementById('mail').value);",
+        "onkeyup" => "auto_email_update = false; check_email_validity(document.getElementById('mail')?.value);",
     )
  );
 
  $LDAP['group_attribute'] = (getenv('LDAP_GROUP_ATTRIBUTE') ? getenv('LDAP_GROUP_ATTRIBUTE') : 'cn');
- $LDAP['group_objectclasses'] = array( 'top', 'posixGroup' ); #groupOfUniqueNames is added automatically if rfc2307bis is available.
+
 
  $LDAP['default_group_attribute_map'] = array( "description" => array("label" => "Description"));
-
- $SHOW_POSIX_ATTRIBUTES = ((strcasecmp(getenv('SHOW_POSIX_ATTRIBUTES'),'TRUE') == 0) ? TRUE : FALSE);
 
  if ($SHOW_POSIX_ATTRIBUTES != TRUE) {
    if ($LDAP['account_attribute'] == "uid") {
@@ -60,8 +62,14 @@
    else {
      unset($LDAP['default_attribute_map']['uid']);
    }
+   $LDAP['group_object_class'] = getenv('LDAP_GROUP_OBJECT_CLASS') ? getenv('LDAP_GROUP_OBJECT_CLASS') : 'groupOfNames';
+   $LDAP['account_object_class'] = getenv('LDAP_ACCOUNT_OBJECT_CLASS') ? getenv('LDAP_ACCOUNT_OBJECT_CLASS') : 'inetOrgPerson';
+   ## Keep only user_attributes keys in default_attribute_map:
+    $LDAP['default_attribute_map'] = array_intersect_key($LDAP['default_attribute_map'], array_flip($LDAP['user_attributes']));
+ $LDAP['group_objectclasses'] = explode(",", (getenv('LDAP_GROUP_OBJECTCLASSES') ? getenv('LDAP_GROUP_ATTRIBUTE') : 'groupOfNames'));
  }
  else {
+ $LDAP['group_objectclasses'] = explode(",", (getenv('LDAP_GROUP_OBJECTCLASSES') ? getenv('LDAP_GROUP_ATTRIBUTE') : 'top,posixGroup'));
    $LDAP['default_attribute_map']["uidnumber"]  = array("label" => "UID");
    $LDAP['default_attribute_map']["gidnumber"]  = array("label" => "GID");
    $LDAP['default_attribute_map']["homedirectory"]  = array("label" => "Home directory", "onkeyup" => "auto_homedir_update = false;");

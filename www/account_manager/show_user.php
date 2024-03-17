@@ -18,7 +18,9 @@ $to_update = array();
 
 if ($SMTP['host'] != "") { $can_send_email = TRUE; } else { $can_send_email = FALSE; }
 
-$LDAP['default_attribute_map']["mail"]  = array("label" => "Email", "onkeyup" => "check_if_we_should_enable_sending_email();");
+if (array_key_exists("mail", $LDAP['default_attribute_map'])) {
+   $LDAP['default_attribute_map']["mail"]  = array("label" => "Email", "onkeyup" => "check_if_we_should_enable_sending_email();");
+}
 
 $attribute_map = $LDAP['default_attribute_map'];
 if (isset($LDAP['account_additional_attributes'])) { $attribute_map = ldap_complete_attribute_array($attribute_map,$LDAP['account_additional_attributes']); }
@@ -227,7 +229,7 @@ if ($ldap_search) {
  ################################################
 
 
- $all_groups = ldap_get_group_list($ldap_connection);
+ $all_groups = array_keys(ldap_get_group_list($ldap_connection));
 
  $currently_member_of = ldap_user_group_membership($ldap_connection,$account_identifier);
 
@@ -444,11 +446,15 @@ if ($ldap_search) {
      <span class="panel-title pull-left"><h3><?php print $account_identifier; ?></h3></span>
      <button class="btn btn-warning pull-right align-self-end" style="margin-top: auto;" onclick="show_delete_user_button();" <?php if ($account_identifier == $USER_ID) { print "disabled"; }?>>Delete account</button>
      <form action="<?php print "{$THIS_MODULE_PATH}"; ?>/index.php" method="post"><input type="hidden" name="delete_user" value="<?php print urlencode($account_identifier); ?>"><button class="btn btn-danger pull-right invisible" id="delete_user">Confirm deletion</button></form>
-    </div>
-    <ul class="list-group">
+    </div><?php
+if ($SHOW_FULL_DN) {
+    ?><ul class="list-group">
       <li class="list-group-item"><?php print $dn; ?></li>
-    </li>
-    <div class="panel-body">
+    </ul><?php
+}
+
+?>
+<div class="panel-body">
      <form class="form-horizontal" action="" enctype="multipart/form-data" method="post">
 
       <input type="hidden" name="update_account">
@@ -460,7 +466,9 @@ if ($ldap_search) {
           $label = $attr_r['label'];
           if (isset($attr_r['onkeyup'])) { $onkeyup = $attr_r['onkeyup']; } else { $onkeyup = ""; }
           if (isset($attr_r['inputtype'])) { $inputtype = $attr_r['inputtype']; } else { $inputtype = ""; }
+if ($SHOW_FULL_DN) {
           if ($attribute == $LDAP['account_attribute']) { $label = "<strong>$label</strong><sup>&ast;</sup>"; }
+}
           if (isset($$attribute)) { $these_values=$$attribute; } else { $these_values = array(); }
           render_attribute_fields($attribute,$label,$these_values,$dn,$onkeyup,$inputtype);
         }
@@ -502,9 +510,14 @@ if ($ldap_search) {
     <div class="progress">
      <div id="StrengthProgressBar" class="progress-bar"></div>
     </div>
-
+<?php
+if ($SHOW_FULL_DN) {
+    ?>
     <div><p align='center'><sup>&ast;</sup>The account identifier.  Changing this will change the full <strong>DN</strong>.</p></div>
+<?php
+}
 
+?>
    </div>
   </div>
 

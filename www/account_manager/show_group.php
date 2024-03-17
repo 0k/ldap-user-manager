@@ -127,9 +127,11 @@ foreach ($attribute_map as $attribute => $attr_r) {
 
 }
 
-if (!isset($gidnumber[0]) or !is_numeric($gidnumber[0])) {
-  $gidnumber[0]=ldap_get_highest_id($ldap_connection,$type="gid");
-  $gidnumber['count']=1;
+if ($SHOW_POSIX_ATTRIBUTES) {
+    if (!isset($gidnumber[0]) or !is_numeric($gidnumber[0])) {
+        $gidnumber[0]=ldap_get_highest_id($ldap_connection,$type="gid");
+        $gidnumber['count']=1;
+    }
 }
 
 ######################################################################################
@@ -351,11 +353,17 @@ ldap_close($ldap_connection);
           <button class="btn btn-warning pull-right" onclick="show_delete_group_button();" <?php if ($group_cn == $LDAP["admins_group"]) { print "disabled"; } ?>>Delete group</button>
           <form action="<?php print "{$THIS_MODULE_PATH}"; ?>/groups.php" method="post" enctype="multipart/form-data"><input type="hidden" name="delete_group" value="<?php print $group_cn; ?>"><button class="btn btn-danger pull-right invisible" id="delete_group">Confirm deletion</button></form>
         </div>
+            <?php
+if ($SHOW_FULL_DN) {
+    ?>
 
         <ul class="list-group">
           <li class="list-group-item"><?php print $full_dn; ?></li>
         </li>
+<?php
+}
 
+?>
         <div class="panel-body">
           <div class="row">
             <div class="dual-list list-left col-md-5">

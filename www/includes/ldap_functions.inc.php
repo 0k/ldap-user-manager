@@ -367,7 +367,14 @@ function fetch_id_stored_in_ldap($ldap_connection,$type="uid") {
 
 function ldap_get_highest_id($ldap_connection,$type="uid") {
 
- global $log_prefix, $LDAP, $LDAP_DEBUG, $min_uid, $min_gid;
+    global $log_prefix, $LDAP, $SHOW_POSIX_ATTRIBUTES, $LDAP_DEBUG, $min_uid, $min_gid;
+
+    if ($SHOW_POSIX_ATTRIBUTES != TRUE) {
+        throw new Exception(
+            "Function 'ldap_get_highest_id(..)' is not available as \$SHOW_POSIX_ATTRIBUTES is false"
+        );
+        return FALSE;
+    }
 
  if ($type == "uid") {
   $this_id = $min_uid;
@@ -379,7 +386,7 @@ function ldap_get_highest_id($ldap_connection,$type="uid") {
   $type = "gid";
   $this_id = $min_gid;
   $record_base_dn = $LDAP['group_dn'];
-  $record_filter = "(objectClass=posixGroup)";
+  $record_filter = "(objectClass={$LDAP["group_object_class"]})";
   $record_attribute = "gidnumber";
  }
 
@@ -413,29 +420,33 @@ function ldap_get_highest_id($ldap_connection,$type="uid") {
 ##################################
 
 
-function ldap_get_group_list($ldap_connection,$start=0,$entries=NULL,$sort="asc",$filters=NULL) {
+function ldap_get_group_list($ldap_connection) {
 
  global $log_prefix, $LDAP, $LDAP_DEBUG;
 
- $this_filter = "(&(objectclass=*)$filters)";
+ $filters="";
+ $this_filter = "(&(objectclass={$LDAP["group_object_class"]})$filters)";
  $ldap_search = @ ldap_search($ldap_connection, "{$LDAP['group_dn']}", $this_filter);
 
  $result = @ ldap_get_entries($ldap_connection, $ldap_search);
  if ($LDAP_DEBUG == TRUE) { error_log("$log_prefix LDAP returned {$result['count']} groups for {$LDAP['group_dn']} when using this filter: $this_filter",0); }
 
  $records = array();
+
  foreach ($result as $record) {
-
-  if (isset($record[$LDAP['group_attribute']][0])) {
-
-   array_push($records, $record[$LDAP['group_attribute']][0]);
-
+     if (!is_array($record)) continue;
+  if (!isset($record[$LDAP['group_attribute']][0])) {
+      throw new Exception("Group doesn't have attribute '{$LDAP['group_attribute']}'.");
   }
+  $group_name = $record[$LDAP['group_attribute']][0];
+  $records[$group_name] = array(
+      "description" => $record["description"][0],
+  );
+
+  
  }
 
- if ($sort == "asc") { sort($records); } else { rsort($records); }
-
- return(array_slice($records,$start,$entries));
+ return $records;
 
 
 }
@@ -484,7 +495,6 @@ function ldap_get_group_members($ldap_connection,$group_name,$start=0,$entries=N
  $records = array();
 
  if ($result_count > 0) {
-
   foreach ($result[0][$LDAP['group_membership_attribute']] as $key => $value) {
 
    if ($key !== 'count' and !empty($value)) {
@@ -523,11 +533,19 @@ function ldap_is_group_member($ldap_connection,$group_name,$username) {
  $rfc2307bis_available = ldap_detect_rfc2307bis($ldap_connection);
 
  $ldap_search_query = "({$LDAP['group_attribute']}=" . ldap_escape($group_name, "", LDAP_ESCAPE_FILTER) . ")";
+
  $ldap_search = @ ldap_search($ldap_connection, "{$LDAP['group_dn']}", $ldap_search_query);
 
  if ($ldap_search) {
+
+     
    $result = ldap_get_entries($ldap_connection, $ldap_search);
 
+  ## if more than one, then error
+  if ($result['count'] > 1) {
+    error_log("$log_prefix More than one group called $group_name was found in LDAP",0);
+    return FALSE;
+  }
    if ($LDAP['group_membership_uses_uid'] == FALSE) {
      $username = "{$LDAP['account_attribute']}=$username,{$LDAP['user_dn']}";
    }
@@ -558,7 +576,7 @@ function ldap_user_group_membership($ldap_connection,$username) {
   $username = "{$LDAP['account_attribute']}=$username,{$LDAP['user_dn']}";
  }
 
- $ldap_search_query = "(&(objectClass=posixGroup)({$LDAP['group_membership_attribute']}={$username}))";
+ $ldap_search_query = "(&(objectClass={$LDAP["group_object_class"]})({$LDAP['group_membership_attribute']}={$username}))";
  $ldap_search = @ ldap_search($ldap_connection, "{$LDAP['group_dn']}", $ldap_search_query, array($LDAP['group_attribute']));
  $result = ldap_get_entries($ldap_connection, $ldap_search);
 
@@ -578,7 +596,7 @@ function ldap_user_group_membership($ldap_connection,$username) {
 
 function ldap_new_group($ldap_connection,$group_name,$initial_member="",$extra_attributes=array()) {
 
- global $log_prefix, $LDAP, $LDAP_DEBUG;
+    global $log_prefix, $LDAP, $LDAP_DEBUG, $SHOW_POSIX_ATTRIBUTES;
 
  $rfc2307bis_available = ldap_detect_rfc2307bis($ldap_connection);
 
@@ -592,6 +610,7 @@ function ldap_new_group($ldap_connection,$group_name,$initial_member="",$extra_a
    $ldap_search = @ ldap_search($ldap_connection, "{$LDAP['group_dn']}", $ldap_search_query);
    $result = @ ldap_get_entries($ldap_connection, $ldap_search);
 
+   
    if ($result['count'] == 0) {
 
      if ($LDAP['group_membership_uses_uid'] == FALSE and $initial_member != "") { $initial_member = "{$LDAP['account_attribute']}=$initial_member,{$LDAP['user_dn']}"; }
@@ -603,11 +622,13 @@ function ldap_new_group($ldap_connection,$group_name,$initial_member="",$extra_a
 
      $new_group_array = array_merge($new_group_array,$extra_attributes);
 
-     if (!isset($new_group_array["gidnumber"][0]) or !is_numeric($new_group_array["gidnumber"][0])) {
-       $highest_gid = ldap_get_highest_id($ldap_connection,'gid');
-       $new_gid = $highest_gid + 1;
-       $new_group_array["gidnumber"] = $new_gid;
-       $update_gid_store=TRUE;
+     if ($SHOW_POSIX_ATTRIBUTES != FALSE) {
+         if (!isset($new_group_array["gidnumber"][0]) or !is_numeric($new_group_array["gidnumber"][0])) {
+             $highest_gid = ldap_get_highest_id($ldap_connection,'gid');
+             $new_gid = $highest_gid + 1;
+             $new_group_array["gidnumber"] = $new_gid;
+             $update_gid_store=TRUE;
+         }
      }
 
      $group_dn="cn=$new_group,{$LDAP['group_dn']}";
@@ -689,7 +710,8 @@ function ldap_delete_group($ldap_connection,$group_name) {
  global $log_prefix, $LDAP, $LDAP_DEBUG;
 
  if (isset($group_name)) {
-
+     // XXXvlab: incorrectly assume that dc is using same cn than cn
+     // attribute, as first element of the dc.
   $delete_query = "{$LDAP['group_attribute']}=" . ldap_escape($group_name, "", LDAP_ESCAPE_FILTER) . ",{$LDAP['group_dn']}";
   $delete = @ ldap_delete($ldap_connection, $delete_query);
 
@@ -813,13 +835,78 @@ function ldap_complete_attribute_array($default_attributes,$additional_attribute
 
 function ldap_new_account($ldap_connection,$account_r) {
 
-  global $log_prefix, $LDAP, $LDAP_DEBUG, $DEFAULT_USER_SHELL, $DEFAULT_USER_GROUP;
+    global $log_prefix, $LDAP, $SHOW_POSIX_ATTRIBUTES, $LDAP_DEBUG, $DEFAULT_USER_SHELL, $DEFAULT_USER_GROUP;
 
-  if (    isset($account_r['givenname'][0])
-      and isset($account_r['sn'][0])
-      and isset($account_r['cn'][0])
-      and isset($account_r['uid'][0])
-      and isset($account_r[$LDAP['account_attribute']])
+  ## for each key in $LDAP['default_attribute_map'] check if there's the same key in $account_r:
+  $missingAttributes = array();
+  foreach ($LDAP['default_attribute_map'] as $key => $value) {
+      if (!isset($account_r[$key][0])) {
+          $missingAttributes[] = $key;
+          break;
+      }
+  }
+
+  if (!empty($missingAttributes)) {
+      error_log("$log_prefix Create account; missing parameters: " . implode(", ", $missingAttributes),0);
+      return FALSE;
+  }
+
+  // Fetch required LDAP field names from current $LDAP['account_objectclasses']
+  $schemas = ldap_read($ldap_connection, "cn=subschema", "(objectClass=subschema)", array('objectClasses'));
+  $entry = ldap_first_entry($ldap_connection, $schemas);
+  $attributes = ldap_get_attributes($ldap_connection, $entry);
+  $objectClasses = $attributes['objectClasses'];
+  $requiredAttributes = array();
+  foreach ($LDAP['account_objectclasses'] as $accountObjectClass) {
+    foreach ($objectClasses as $objectClass) {
+        if (strpos($objectClass, " NAME '$accountObjectClass' " ) === false) continue;
+        preg_match('/MUST \(([^)]+)\)/', $objectClass, $matches);
+        if (!empty($matches[1])) {
+            // Extract and clean the required attributes
+            $requiredAttributes = array_merge(
+                $requiredAttributes,
+                array_map('trim', explode('$', $matches[1]))
+            );
+        }
+        break;
+    }
+  }
+  ## for each required Attribute, see if we can't put a default value
+  $missingAttributes = Array();
+    foreach ($requiredAttributes as $requiredAttribute) {
+        if (isset($account_r[$requiredAttribute])) continue;
+        // Attribute is missing
+        switch ($requiredAttribute) {
+            case 'cn':
+                if (isset($account_r['uid'])) {
+                    $account_r[$requiredAttribute] = array(
+                        0 => $account_r['uid'][0]
+                    );
+                    break;
+                }
+                $missingAttributes[] = $requiredAttribute;
+                break;
+            case 'sn':
+                if (isset($account_r['uid'])) {
+                    $account_r[$requiredAttribute] = array(
+                        0 => $account_r['uid'][0]
+                    );
+                    break;
+                }
+                $missingAttributes[] = $requiredAttribute;
+                break;
+            default:
+                ## add attribute to missing atttributes
+                $missingAttributes[] = $requiredAttribute;
+                break;
+        }
+    }
+    if (!empty($missingAttributes)) {
+        error_log("$log_prefix Create account; missing LDAP parameters: " . implode(", ", $missingAttributes),0);
+        return FALSE;
+    }
+
+  if (isset($account_r[$LDAP['account_attribute']])
       and isset($account_r['password'][0])) {
 
    $account_identifier = $account_r[$LDAP['account_attribute']][0];
@@ -841,50 +928,61 @@ function ldap_new_account($ldap_connection,$account_r) {
 
      $account_attributes = array_merge($account_r, $account_attributes);
 
-     if (!isset($account_attributes['uidnumber'][0]) or !is_numeric($account_attributes['uidnumber'][0])) {
-       $highest_uid = ldap_get_highest_id($ldap_connection,'uid');
-       $account_attributes['uidnumber'][0] = $highest_uid + 1;
-     }
+     if ($SHOW_POSIX_ATTRIBUTES != FALSE) {
+         if (!isset($account_attributes['uidnumber'][0]) or !is_numeric($account_attributes['uidnumber'][0])) {
+             $highest_uid = ldap_get_highest_id($ldap_connection,'uid');
+             $account_attributes['uidnumber'][0] = $highest_uid + 1;
+         }
 
-     if (!isset($account_attributes['gidnumber'][0]) or !is_numeric($account_attributes['gidnumber'][0])) {
-       $default_gid = ldap_get_gid_of_group($ldap_connection,$DEFAULT_USER_GROUP);
-       if (!is_numeric($default_gid)) {
-         $group_add = ldap_new_group($ldap_connection,$account_identifier,$account_identifier);
-         $account_attributes['gidnumber'][0] = ldap_get_gid_of_group($ldap_connection,$account_identifier);
-       }
-       else {
-        $account_attributes['gidnumber'][0] = $default_gid;
-        $add_to_group = $DEFAULT_USER_GROUP;
-       }
+         if (!isset($account_attributes['gidnumber'][0]) or !is_numeric($account_attributes['gidnumber'][0])) {
+             $default_gid = ldap_get_gid_of_group($ldap_connection,$DEFAULT_USER_GROUP);
+             if (!is_numeric($default_gid)) {
+                 $group_add = ldap_new_group($ldap_connection,$account_identifier,$account_identifier);
+                 $account_attributes['gidnumber'][0] = ldap_get_gid_of_group($ldap_connection,$account_identifier);
+             }
+             else {
+                 $account_attributes['gidnumber'][0] = $default_gid;
+                 $add_to_group = $DEFAULT_USER_GROUP;
+             }
+         }
+         else
+         {
+             $add_to_group = ldap_get_group_name_from_gid($ldap_connection,$account_attributes['gidnumber'][0]);
+         }
+         if (empty($account_attributes['loginshell']))    { $account_attributes['loginshell']    = $DEFAULT_USER_SHELL; }
+         if (empty($account_attributes['homedirectory'])) { $account_attributes['homedirectory'] = "/home/" . $account_r['uid'][0]; }
      }
-     else {
-       $add_to_group = ldap_get_group_name_from_gid($ldap_connection,$account_attributes['gidnumber'][0]);
-       if (!$add_to_group) { $add_to_group = $DEFAULT_USER_GROUP; }
+     if (!isset($add_to_group)) { $add_to_group = $DEFAULT_USER_GROUP; }
+
+
+     try {
+         $add_account = @ ldap_add($ldap_connection,
+                                   "{$LDAP['account_attribute']}=$account_identifier,{$LDAP['user_dn']}",
+                                   $account_attributes
+         );
+     } catch (Exception $e) {
+         error_log("$log_prefix Create account; couldn't create the account for {$account_identifier}: " . $e->getMessage(),0);
+         return FALSE;
      }
-
-     if (empty($account_attributes['loginshell']))    { $account_attributes['loginshell']    = $DEFAULT_USER_SHELL; }
-     if (empty($account_attributes['homedirectory'])) { $account_attributes['homedirectory'] = "/home/" . $account_r['uid'][0]; }
-
-     $add_account = @ ldap_add($ldap_connection,
-                               "{$LDAP['account_attribute']}=$account_identifier,{$LDAP['user_dn']}",
-                               $account_attributes
-                              );
 
      if ($add_account) {
        error_log("$log_prefix Created new account: $account_identifier",0);
        ldap_add_member_to_group($ldap_connection,$add_to_group,$account_identifier);
 
-       $this_uid = fetch_id_stored_in_ldap($ldap_connection,"uid");
-       $new_uid = $account_attributes['uidnumber'][0];
+       if ($SHOW_POSIX_ATTRIBUTES != FALSE) {
+           $this_uid = fetch_id_stored_in_ldap($ldap_connection,"uid");
+       
+           $new_uid = $account_attributes['uidnumber'][0];
 
-       if ($this_uid != FALSE) {
-         $update_uid = @ ldap_mod_replace($ldap_connection, "cn=lastUID,{$LDAP['base_dn']}", array( 'serialNumber' => $new_uid ));
-         if ($update_uid) {
-           error_log("$log_prefix Create account; Updated cn=lastUID with $new_uid",0);
-         }
-         else {
-           error_log("$log_prefix Unable to update cn=lastUID to $new_uid - this could cause user accounts to share the same UID.",0);
-         }
+           if ($this_uid != FALSE) {
+               $update_uid = @ ldap_mod_replace($ldap_connection, "cn=lastUID,{$LDAP['base_dn']}", array( 'serialNumber' => $new_uid ));
+               if ($update_uid) {
+                   error_log("$log_prefix Create account; Updated cn=lastUID with $new_uid",0);
+               }
+               else {
+                   error_log("$log_prefix Unable to update cn=lastUID to $new_uid - this could cause user accounts to share the same UID.",0);
+               }
+           }
        }
        return TRUE;
      }

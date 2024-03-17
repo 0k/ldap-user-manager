@@ -33,18 +33,20 @@ $people = ldap_get_user_list($ldap_connection);
 
 ?>
 <div class="container">
+  <div class="btn" style="float: right;"><?php print count($people);?> account<?php if (count($people) != 1) { print "s"; }?></div>
  <form action="<?php print $THIS_MODULE_PATH; ?>/new_user.php" method="post">
-  <button type="button" class="btn btn-light"><?php print count($people);?> account<?php if (count($people) != 1) { print "s"; }?></button>  &nbsp; <button id="add_group" class="btn btn-default" type="submit">New user</button>
+   <button id="add_group" class="btn btn-default" type="submit">New user</button>
  </form> 
  <input class="form-control" id="search_input" type="text" placeholder="Search..">
  <table class="table table-striped">
   <thead>
    <tr>
-     <th>Account name</th>
-     <th>First name</th>
-     <th>Last name</th>
-     <th>Email</th>
-     <th>Member of</th>
+<?php
+          foreach ( $LDAP["default_attribute_map"] as $attribute => $attributeValues ) {
+              print "     <th>{$attributeValues["label"]}</th>\n";
+          }
+print "     <th>Member of</th>\n";
+?>
    </tr>
   </thead>
  <tbody id="userlist">
@@ -63,10 +65,34 @@ foreach ($people as $account_identifier => $attribs){
 
   $group_membership = ldap_user_group_membership($ldap_connection,$account_identifier);
   if (isset($people[$account_identifier]['mail'])) { $this_mail = $people[$account_identifier]['mail']; } else { $this_mail = ""; }
-  print " <tr>\n   <td><a href='{$THIS_MODULE_PATH}/show_user.php?account_identifier=" . urlencode($account_identifier) . "'>$account_identifier</a></td>\n";
-  print "   <td>" . $people[$account_identifier]['givenname'] . "</td>\n";
-  print "   <td>" . $people[$account_identifier]['sn'] . "</td>\n";
-  print "   <td>$this_mail</td>\n"; 
+  print " <tr>\n";
+  foreach ( $LDAP["default_attribute_map"] as $attribute => $attributeValues ) {
+      print "   <td>";
+      switch ($attribute) {
+      case "uid":
+          print "<a href='{$THIS_MODULE_PATH}/show_user.php?account_identifier=" . urlencode($account_identifier) . "'>$account_identifier</a>";
+          break;
+      case "mail":
+          print "$this_mail\n";
+          break;
+      case "givenname":
+          print $people[$account_identifier]['givenname'];
+          break;
+      case "sn":
+          print $people[$account_identifier]['sn'];
+          break;
+      default:
+          if (isset($people[$account_identifier][$attribute])) {
+              $this_value = $people[$account_identifier][$attribute];
+          }
+          else {
+              $this_value = "";
+          }
+          print "   <td>$this_value</td>\n";
+          break;
+      }
+      print "   </td>";
+  }
   print "   <td>" . implode(", ", $group_membership) . "</td>\n";
   print " </tr>\n";
 

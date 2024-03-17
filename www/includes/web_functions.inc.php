@@ -98,6 +98,7 @@ function login_via_headers() {
   //['admins_group'];
   $USER_ID = $_SERVER['HTTP_REMOTE_USER'];
   $remote_groups = explode(',',$_SERVER['HTTP_REMOTE_GROUPS']);
+
   $IS_ADMIN = in_array($LDAP['admins_group'],$remote_groups);
   // users are always validated as we assume, that the auth server does this
   $VALIDATED = true;
@@ -580,8 +581,11 @@ function render_js_homedir_generator($username_field_id,$homedir_field_id) {
  function update_homedir() {
 
   if ( auto_homedir_update == true ) {
-    var username = document.getElementById('$username_field_id').value;
-    document.getElementById('$homedir_field_id').value = "/home/" + username;
+    var username = document.getElementById('$username_field_id')?.value;
+    if (typeof username === 'undefined') return;
+    var homedir = document.getElementById('$homedir_field_id');
+    if (!homedir) return;
+    homedir.value = "/home/" + username;
   }
 
  }
@@ -723,7 +727,7 @@ function human_readable_filesize($bytes) {
 function render_alert_banner($message,$alert_class="success",$timeout=4000) {
 
 ?>
-    <script>window.setTimeout(function() {$(".alert").fadeTo(500, 0).slideUp(500, function(){ $(this).remove(); }); }, $<?php print $timeout; ?>);</script>
+    <script>window.setTimeout(function() {$(".alert").fadeTo(500, 0).slideUp(500, function(){ $(this).remove(); }); }, <?php print $timeout; ?>);</script>
     <div class="alert alert-<?php print $alert_class; ?>" role="alert">
      <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="TRUE">&times;</span></button>
      <p class="text-center"><?php print $message; ?></p>
