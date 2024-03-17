@@ -84,6 +84,9 @@ $LDAP['default_attribute_map'] = array(
  $LDAP['base_dn'] = getenv('LDAP_BASE_DN');
  $LDAP['admin_bind_dn'] = getenv('LDAP_ADMIN_BIND_DN');
  $LDAP['admin_bind_pwd'] = getenv('LDAP_ADMIN_BIND_PWD');
+if (($LDAP['admin_bind_pwd'] == '') && getenv('LDAP_ADMIN_BIND_PWD_FILE')) {
+  $LDAP['admin_bind_pwd'] = file_get_contents(getenv('LDAP_ADMIN_BIND_PWD_FILE'));
+}
  $LDAP['connection_type'] = "plain";
  $LDAP['require_starttls'] = ((strcasecmp(getenv('LDAP_REQUIRE_STARTTLS'),'TRUE') == 0) ? TRUE : FALSE);
  $LDAP['ignore_cert_errors'] = ((strcasecmp(getenv('LDAP_IGNORE_CERT_ERRORS'),'TRUE') == 0) ? TRUE : FALSE);
